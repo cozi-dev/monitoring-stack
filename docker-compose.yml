@@ -1,0 +1,130 @@
+services:
+  goexample:
+    build:
+      context: ./app/goexample
+      dockerfile: Dockerfile
+    container_name: goexample
+    ports:
+      - "18080:8080"
+    labels:
+      logging: "promtail"
+      logging_app: "goexample"
+    environment:
+      OTLP_ENDPOINT: tempo:4318
+      KAFKA_ENDPOINT: kafka:9092
+    volumes:
+      - ./app/goexample:/app
+
+  goexample1:
+    build:
+      context: ./app/goexample1
+      dockerfile: Dockerfile
+    container_name: goexample1
+    ports:
+      - "18082:8080"
+    labels:
+      logging: "promtail"
+      logging_app: "goexample1"
+    environment:
+      OTLP_ENDPOINT: tempo:4318
+      KAFKA_ENDPOINT: kafka:9092
+    volumes:
+      - ./app/goexample1:/app
+
+  rustexample:
+    build:
+      context: ./app/rustexample
+      dockerfile: Dockerfile
+    container_name: rustexample
+    ports:
+      - "18081:8080"
+    labels:
+      logging: "promtail"
+      logging_app: "rustexample"
+    volumes:
+      - ./app/rustexample:/app
+
+  cadvisor:
+    container_name: cadvisor
+    image: gcr.io/cadvisor/cadvisor:v0.52.0
+    volumes:
+      - "/:/rootfs:ro"
+      - "/var/run:/var/run:ro"
+      - "/sys:/sys:ro"
+      - "/var/lib/docker/:/var/lib/docker:ro"
+      - "/dev/disk/:/dev/disk:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    privileged: true
+    devices:
+      - "/dev/kmsg"
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v3.7.3
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-remote-write-receiver"
+    ports:
+      - "19090:9090"
+    volumes:
+      - "./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml"
+    privileged: true
+    depends_on:
+      - cadvisor
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:12.1
+    ports:
+      - "13000:3000"
+    environment:
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - DS_PROMETHEUS=prometheus
+    volumes:
+      - "grafana-data:/var/lib/grafana"
+      - "./config/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml"
+      - "./config/grafana/dashboard.json:/var/lib/grafana/dashboards/dashboard.json"
+      - "./config/grafana/default.yaml:/etc/grafana/provisioning/dashboards/default.yaml"
+    privileged: true
+    depends_on:
+      - prometheus
+
+  loki:
+    image: grafana/loki:3.5.8
+    container_name: loki
+    command: -config.file=/etc/loki/local-config.yaml
+
+  promtail:
+    image: grafana/promtail:3.5.8
+    container_name: promtail
+    volumes:
+      - ./config/promtail/promtail.yaml:/etc/promtail/docker-config.yaml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/docker-config.yaml
+    depends_on:
+      - loki
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./config/tempo/tempo.yaml:/etc/tempo.yaml
+
+  kafka:
+    hostname: kafka
+    image: apache/kafka:3.9.1
+    container_name: kafka
+    restart: always
+    env_file:
+      - ./config/kafka/kafka-variables.env
+    expose:
+      - "9092"
+      - "9093"
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+
+volumes:
+  grafana-data:
