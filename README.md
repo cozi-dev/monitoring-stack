@@ -1,5 +1,7 @@
 # Monitoring Demo
 
+![Overview](./overview.jpg)
+
 This project is a minimal end‑to‑end **observability stack** showcasing:
 
 - **Metrics** with Prometheus
